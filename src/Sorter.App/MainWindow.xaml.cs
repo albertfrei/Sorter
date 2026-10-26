@@ -14,8 +14,11 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog() != true) return;
         SourcePath.Text = dialog.FolderName;
         samples = [];
-        SamplesGrid.ItemsSource = samples;
+        ShowSamples();
+        EmptyTitle.Text = "Ready to discover your samples";
+        EmptyDescription.Text = "Scan this library to preview categories before copying.";
         CopyButton.IsEnabled = false;
+        Status.Text = "Library selected. Scan to preview categories.";
     }
     private void ChooseDestination(object sender, RoutedEventArgs e)
     {
@@ -27,18 +30,36 @@ public partial class MainWindow : Window
         SourceButton.IsEnabled = DestinationButton.IsEnabled = ScanButton.IsEnabled = !busy;
         CopyButton.IsEnabled = !busy && samples.Count > 0;
     }
+    private void ShowSamples()
+    {
+        SamplesGrid.ItemsSource = samples.Select(sample => new SampleRow(sample, SourcePath.Text)).ToArray();
+        SampleCount.Text = $"{samples.Count:N0} files";
+        EmptyState.Visibility = samples.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
     private async void Scan(object sender, RoutedEventArgs e)
     {
+        if (!System.IO.Directory.Exists(SourcePath.Text)) { Status.Text = "Choose a sample library first."; return; }
         Busy(true);
+        samples = [];
+        ShowSamples();
+        EmptyTitle.Text = "Finding your sounds…";
+        EmptyDescription.Text = "Reading metadata and matching sample names.";
         Status.Text = "Scanning…";
         try
         {
             var source = SourcePath.Text;
             samples = await Task.Run(() => LibrarySorter.Scan(source, new MetadataClassifier()));
-            SamplesGrid.ItemsSource = samples;
+            ShowSamples();
+            EmptyTitle.Text = "No samples found";
+            EmptyDescription.Text = "Try a folder containing WAV, AIFF, FLAC, MP3, OGG or M4A files.";
             Status.Text = $"{samples.Count} samples · {samples.Count(s => s.Category == "Uncategorized")} uncategorized";
         }
-        catch (Exception ex) { Status.Text = ex.Message; }
+        catch (Exception ex)
+        {
+            Status.Text = ex.Message;
+            EmptyTitle.Text = "Scan could not finish";
+            EmptyDescription.Text = "Check the folder is accessible and try again.";
+        }
         finally { Busy(false); }
     }
     private async void Copy(object sender, RoutedEventArgs e)
