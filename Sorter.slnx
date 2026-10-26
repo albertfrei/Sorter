@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Sorter.App/Sorter.App.csproj" />
+    <Project Path="src/Sorter.Core/Sorter.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Sorter.SmokeTests/Sorter.SmokeTests.csproj" />
+  </Folder>
+</Solution>

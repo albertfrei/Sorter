@@ -4,7 +4,9 @@ Windows sample-library organizer using .NET 10 and WPF.
 
 ## Run on Windows
 
-Install the .NET 10 SDK, then run from the repository root:
+Open `Sorter.slnx` in a Visual Studio version that supports .NET 10 and `.slnx`, with the **.NET desktop development** workload installed. Set **Sorter.App** as the startup project and press F5.
+
+Alternatively, install the .NET 10 SDK, then run from the repository root:
 
 ```powershell
 dotnet run --project src/Sorter.App
