@@ -2,3 +2,10 @@
 **/obj/
 .vs/
 *.user
+
+# Local audio datasets, labels and trained models
+ml/.venv/
+ml/data/
+ml/artifacts/
+**/__pycache__/
+*.joblib

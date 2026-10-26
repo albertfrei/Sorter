@@ -16,7 +16,11 @@ Choose a library, scan to preview categories, choose an output folder outside th
 
 Discovery supports WAV, AIFF, FLAC, MP3, OGG and M4A. Classification uses WAV RIFF INFO title, comment, genre and keyword tags first, then filenames and immediate parent-folder labels for kicks, snares, hats, claps, cymbals, percussion, bass/808, vocals, loops and effects. Unknown labels remain Uncategorized. Other embedded tag formats are not read yet. No audio is uploaded.
 
-Playback, manual category correction, and machine learning inference are not implemented yet. `ISampleClassifier` provides an extension point for an audio model; the current classifier is a heuristic baseline.
+The WPF app does not yet include playback, manual category correction or machine learning inference. `ISampleClassifier` provides an extension point for an audio model; the app's current classifier is a heuristic baseline.
+
+## Train audio traits
+
+The [local ML toolkit](ml/README.md) lets you listen to drum one-shots, label overlapping traits such as **soft**, **acoustic** and **bright**, train an audio-based model, and export suggested tags. It includes a local labeling page, pack-separated evaluation and per-trait metrics. Start there with your own samples; no trained model or real-library accuracy claim is included. Predictions are not yet connected to the WPF table or folder exports.
 
 ## Copy access errors
 
