@@ -33,5 +33,23 @@ try {
  Check(Directory.GetFiles(source, "*", SearchOption.AllDirectories).Length == 6);
  try { LibrarySorter.Copy(source, output, samples); throw new Exception("Overwrite accepted"); } catch (IOException) { assertions++; }
  try { LibrarySorter.Copy(source, Path.Combine(source, "sorted"), samples); throw new Exception("Nested output accepted"); } catch (ArgumentException) { assertions++; }
+ if (!OperatingSystem.IsWindows()) {
+  var denied = Path.Combine(root, "denied");
+  Directory.CreateDirectory(denied);
+  File.SetUnixFileMode(denied, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+  try {
+   try { LibrarySorter.Copy(source, denied, samples); throw new Exception("Expected access denial"); }
+   catch (UnauthorizedAccessException ex) {
+    Check(ex.Message.Contains("create output folder") && ex.Message.Contains(denied));
+    Check(ex.Message.Contains("0 files copied") && ex.InnerException is UnauthorizedAccessException);
+   }
+  } finally { File.SetUnixFileMode(denied, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute); }
+  var blockedSource = Path.Combine(source, "unknown.flac");
+  File.SetUnixFileMode(blockedSource, UnixFileMode.None);
+  try {
+   try { LibrarySorter.Copy(source, Path.Combine(root, "read-denied"), [new Sample(blockedSource, "Uncategorized", "test")]); throw new Exception("Expected source denial"); }
+   catch (UnauthorizedAccessException ex) { Check(ex.Message.Contains("read source file") && ex.Message.Contains(blockedSource)); }
+  } finally { File.SetUnixFileMode(blockedSource, UnixFileMode.UserRead | UnixFileMode.UserWrite); }
+ }
  Console.WriteLine($"PASS: {assertions} assertions: scanning, labels, copy, originals, collisions, nested output.");
 } finally { Directory.Delete(root, true); }

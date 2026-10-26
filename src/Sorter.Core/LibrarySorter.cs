@@ -79,8 +79,30 @@ public static class LibrarySorter
                 throw new ArgumentException("Sample is outside the source library.");
             // Retain source structure to preserve identically named samples.
             var target = Path.Combine(targetRoot, sample.Category, relative);
-            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            File.Copy(sample.Path, target, overwrite: false);
+            var operation = "create output folder";
+            var blockedPath = Path.GetDirectoryName(target)!;
+            try
+            {
+                Directory.CreateDirectory(blockedPath);
+                operation = "read source file";
+                blockedPath = sample.Path;
+                using var input = new FileStream(sample.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                operation = "create output file";
+                blockedPath = target;
+                using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                operation = "copy file data";
+                input.CopyTo(output);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                throw new UnauthorizedAccessException(
+                    $"Access denied while trying to {operation}:\n{blockedPath}\n\n" +
+                    $"{count} files copied before stopping. Originals are unchanged.\n" +
+                    "Choose a fresh output folder you can write to, outside the source library. " +
+                    "If the source is blocked, check that you can open it in Windows Explorer. " +
+                    "If Windows Security reports a Controlled folder access block, allow Sorter only if you trust it, or choose another output location.\n\n" +
+                    $"Windows details: {ex.Message}", ex);
+            }
             count++;
         }
         return count;

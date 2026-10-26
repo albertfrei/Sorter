@@ -18,6 +18,10 @@ Discovery supports WAV, AIFF, FLAC, MP3, OGG and M4A. Classification uses WAV RI
 
 Playback, manual category correction, and machine learning inference are not implemented yet. `ISampleClassifier` provides an extension point for an audio model; the current classifier is a heuristic baseline.
 
+## Copy access errors
+
+Choose a fresh output folder outside the source library that your Windows account can write to (for example, a new folder under your Music folder). Avoid Windows and Program Files directories. The access-denied dialog identifies the operation and blocked path, and reports how many files finished copying. Check source files can be opened in Explorer and output folders can be written to. If Windows Security reports a Controlled folder access block, allow the trusted Sorter executable or use another output location; do not disable protection globally. Some copies can remain after a failure, including an incomplete file if writing was interrupted. Retry into a fresh folder because existing files are never overwritten.
+
 ## Validate
 
 ```sh

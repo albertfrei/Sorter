@@ -74,7 +74,17 @@ public partial class MainWindow : Window
             var count = await Task.Run(() => LibrarySorter.Copy(source, destination, samples));
             Status.Text = $"Copied {count} samples. Originals preserved.";
         }
-        catch (Exception ex) { Status.Text = $"Copy stopped; some files may already be copied. {ex.Message}"; }
+        catch (UnauthorizedAccessException ex)
+        {
+            Status.Text = "Copy stopped: access denied. See the details for the blocked path.";
+            MessageBox.Show(this, ex.Message, "Copy access denied", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Copy stopped. Some files may already be copied.";
+            MessageBox.Show(this, $"{ex.Message}\n\nSome files may already be copied. Originals are unchanged.",
+                "Copy could not finish", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
         finally { Busy(false); }
     }
 }
