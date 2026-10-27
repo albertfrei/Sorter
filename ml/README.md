@@ -12,7 +12,7 @@ In the page:
 
 1. Click **Browse folders…** (or paste the folder path).
 2. Optionally enter an original pack name, then click **Import / resume folder**. Audio stays in place; import adds references to the dataset.
-3. Play a sound, choose all audible traits, confirm you listened, and click **Save & next**. Labels are written immediately and the next sound appears automatically.
+3. Play a sound, choose all audible traits, and click **Save & next**. Labels are written immediately and the next sound appears automatically. **Use previous tags** fills in the last successfully saved sample's tags from this session; edit them as needed before saving. This also works when the previous selection had no tags. The button is disabled until you save a sample, and resets when importing or resuming a dataset. There is no listening confirmation checkbox.
 4. Use **Skip for now** when uncertain. Skips remain unlabeled, earn no progress, and can be revisited at the end of the round.
 5. Work toward the 20-sample session goal. You can stop anytime and **Resume saved dataset** later; unfinished sounds appear first. **Trait guide & previous labels** lets you review earlier answers.
 

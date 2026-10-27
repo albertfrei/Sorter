@@ -19,6 +19,7 @@ state.setdefault('manifest', sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1
 state.setdefault('session_saved', 0)
 state.setdefault('skipped', [])
 state.setdefault('current_path', '')
+state.setdefault('previous_tags', None)
 
 with st.expander('📂 Choose or resume a library', expanded=not bool(state.manifest)):
     st.caption('Choose a folder on the computer running this app. Import references the files; it never moves or copies audio.')
@@ -39,6 +40,7 @@ with st.expander('📂 Choose or resume a library', expanded=not bool(state.mani
             state.current_path = ''
             state.skipped = []
             state.session_saved = 0
+            state.previous_tags = None
             state.pop('review_sample', None)
             st.success(f'{added} new samples imported. Existing labels preserved.')
         except (OSError, ValueError) as ex:
@@ -59,6 +61,7 @@ with st.expander('📂 Choose or resume a library', expanded=not bool(state.mani
             state.current_path = ''
             state.skipped = []
             state.session_saved = 0
+            state.previous_tags = None
     st.caption(f'Labels are saved automatically here: {storage}')
 
 if not state.manifest:
@@ -130,23 +133,25 @@ except (OSError, RuntimeError, ValueError) as ex:
     st.error(f'Cannot play this sample: {ex}. Skip it to continue; no label will be saved.')
 
 if readable:
+    if st.button('Use previous tags', key='use_previous', disabled=state.previous_tags is None,
+                 help='Reuse tags from the last sample you saved in this session. You can edit them before saving.'):
+        state[f'tags-{identity}'] = list(state.previous_tags)
+    if state.previous_tags is not None:
+        st.caption('Previous tags: ' + (', '.join(state.previous_tags) or 'None selected'))
     with st.form(f'label-{identity}'):
         pack = st.text_input('Original sample pack', value=row['pack'], key=f'pack-{identity}')
         selected = st.multiselect('What does it sound like?', TAGS, default=[t for t in TAGS if row[t] == '1'], key=f'tags-{identity}')
-        st.caption('Choose every trait you hear. Unselected traits become explicit negatives when saved. No model answers are shown so your labels stay independent.')
-        confirmed = st.checkbox('I listened and can judge these traits', key=f'confirm-{identity}')
+        st.caption('Choose every trait you hear. Unselected traits become explicit negatives when saved.')
         submitted = st.form_submit_button('Save & next →', type='primary')
         if submitted:
-            if not confirmed:
-                st.warning('Listen first, then confirm—or skip if unsure.')
-            else:
-                try:
-                    newly_reviewed = save_labels(manifest, identity, pack, selected)
-                    state.session_saved += int(newly_reviewed)
-                    state.current_path = ''
-                    st.rerun()
-                except (OSError, ValueError) as ex:
-                    st.error(f'Labels were not saved: {ex}')
+            try:
+                newly_reviewed = save_labels(manifest, identity, pack, selected)
+                state.previous_tags = list(selected)
+                state.session_saved += int(newly_reviewed)
+                state.current_path = ''
+                st.rerun()
+            except (OSError, ValueError) as ex:
+                st.error(f'Labels were not saved: {ex}')
 if st.button('Skip for now →', key='skip'):
     state.skipped = list(set([*state.skipped, identity]))
     state.current_path = ''

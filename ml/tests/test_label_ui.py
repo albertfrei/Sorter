@@ -53,7 +53,6 @@ class LabelUiTests(unittest.TestCase):
     def test_import_label_auto_advance_and_resume(self):
         app = self.imported_app()
         app.multiselect[0].set_value(['soft', 'bright', 'acoustic'])
-        next(c for c in app.checkbox if c.label == 'I listened and can judge these traits').check()
         click(app, 'Save & next →')
         self.assertEqual(app.subheader[0].value, 'b.wav')
         self.assertEqual(app.session_state['session_saved'], 1)
@@ -81,16 +80,35 @@ class LabelUiTests(unittest.TestCase):
         click(app, 'Revisit skipped samples')
         self.assertEqual(app.subheader[0].value, 'a.wav')
 
-    def test_confirmation_required_and_relabel_does_not_inflate_progress(self):
+    def test_reuse_previous_tags_is_editable_and_does_not_save(self):
+        app = self.imported_app()
+        self.assertTrue(app.button(key='use_previous').disabled)
+        app.multiselect[0].set_value(['soft', 'acoustic'])
+        click(app, 'Save & next →')
+        self.assertEqual(app.multiselect[0].value, [])
+        click(app, 'Use previous tags')
+        self.assertEqual(app.multiselect[0].value, ['soft', 'acoustic'])
+        self.assertEqual(ml.read_rows(app.session_state['manifest'])[1]['reviewed'], '0')
+        app.multiselect[0].set_value(['soft', 'bright'])
+        click(app, 'Save & next →')
+        row = ml.read_rows(app.session_state['manifest'])[1]
+        self.assertEqual(row['soft'], '1')
+        self.assertEqual(row['bright'], '1')
+        self.assertEqual(row['acoustic'], '0')
+
+    def test_empty_previous_tags_can_clear_selection(self):
         app = self.imported_app()
         click(app, 'Save & next →')
-        self.assertTrue(app.warning)
-        self.assertEqual(app.session_state['session_saved'], 0)
-        next(c for c in app.checkbox if c.label == 'I listened and can judge these traits').check()
+        app.multiselect[0].set_value(['bright']).run()
+        click(app, 'Use previous tags')
+        self.assertEqual(app.multiselect[0].value, [])
+
+    def test_save_without_confirmation_and_relabel_does_not_inflate_progress(self):
+        app = self.imported_app()
         click(app, 'Save & next →')
+        self.assertFalse(any(c.label == 'I listened and can judge these traits' for c in app.checkbox))
         app.selectbox(key='review_sample').select(str(self.library / 'a.wav'))
         click(app, 'Review this sample')
-        next(c for c in app.checkbox if c.label == 'I listened and can judge these traits').check()
         click(app, 'Save & next →')
         self.assertEqual(app.session_state['session_saved'], 1)
 
@@ -128,7 +146,6 @@ class LabelUiTests(unittest.TestCase):
         self.assertEqual(app.text_input(key='folder').value, str(self.library))
         click(app, 'Import / resume folder')
         for _ in range(2):
-            next(c for c in app.checkbox if c.label == 'I listened and can judge these traits').check()
             click(app, 'Save & next →')
         self.assertTrue(any('Library complete' in message.value for message in app.success))
         self.assertEqual(app.session_state['session_saved'], 2)
