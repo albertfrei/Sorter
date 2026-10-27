@@ -52,6 +52,7 @@ class LabelUiTests(unittest.TestCase):
 
     def test_import_label_auto_advance_and_resume(self):
         app = self.imported_app()
+        next(s for s in app.selectbox if s.label == 'Instrument').select('kick')
         app.multiselect[0].set_value(['soft', 'bright', 'acoustic'])
         click(app, 'Save & next →')
         self.assertEqual(app.subheader[0].value, 'b.wav')
@@ -59,6 +60,7 @@ class LabelUiTests(unittest.TestCase):
         rows = ml.read_rows(app.session_state['manifest'])
         self.assertEqual(rows[0]['reviewed'], '1')
         self.assertEqual(rows[0]['pack'], 'Original pack')
+        self.assertEqual(rows[0]['instrument'], 'kick')
         self.assertEqual(rows[0]['soft'], '1')
         self.assertEqual(rows[0]['bright'], '1')
         self.assertEqual(rows[0]['acoustic'], '1')
@@ -83,10 +85,12 @@ class LabelUiTests(unittest.TestCase):
     def test_reuse_previous_tags_is_editable_and_does_not_save(self):
         app = self.imported_app()
         self.assertTrue(app.button(key='use_previous').disabled)
+        next(s for s in app.selectbox if s.label == 'Instrument').select('snare')
         app.multiselect[0].set_value(['soft', 'acoustic'])
         click(app, 'Save & next →')
         self.assertEqual(app.multiselect[0].value, [])
         click(app, 'Use previous tags')
+        self.assertEqual(next(s for s in app.selectbox if s.label == 'Instrument').value, 'snare')
         self.assertEqual(app.multiselect[0].value, ['soft', 'acoustic'])
         self.assertEqual(ml.read_rows(app.session_state['manifest'])[1]['reviewed'], '0')
         app.multiselect[0].set_value(['soft', 'bright'])
@@ -98,6 +102,7 @@ class LabelUiTests(unittest.TestCase):
 
     def test_empty_previous_tags_can_clear_selection(self):
         app = self.imported_app()
+        next(s for s in app.selectbox if s.label == 'Instrument').select('kick')
         click(app, 'Save & next →')
         app.multiselect[0].set_value(['bright']).run()
         click(app, 'Use previous tags')
@@ -105,12 +110,37 @@ class LabelUiTests(unittest.TestCase):
 
     def test_save_without_confirmation_and_relabel_does_not_inflate_progress(self):
         app = self.imported_app()
+        next(s for s in app.selectbox if s.label == 'Instrument').select('kick')
         click(app, 'Save & next →')
         self.assertFalse(any(c.label == 'I listened and can judge these traits' for c in app.checkbox))
         app.selectbox(key='review_sample').select(str(self.library / 'a.wav'))
         click(app, 'Review this sample')
         click(app, 'Save & next →')
         self.assertEqual(app.session_state['session_saved'], 1)
+
+    def test_instrument_required_but_timbre_can_stay_unlabeled(self):
+        app = self.imported_app()
+        click(app, 'Save & next →')
+        self.assertTrue(app.error)
+        self.assertEqual(app.session_state['session_saved'], 0)
+        next(s for s in app.selectbox if s.label == 'Instrument').select('piano')
+        click(app, 'Save & next →')
+        row = ml.read_rows(app.session_state['manifest'])[0]
+        self.assertEqual(row['instrument'], 'piano')
+        self.assertEqual(row['traits_reviewed'], '0')
+        self.assertTrue(all(row[tag] == '' for tag in ml.TAGS))
+
+    def test_explicit_no_timbre_traits_and_conflicting_selection(self):
+        app = self.imported_app()
+        next(s for s in app.selectbox if s.label == 'Instrument').select('snare')
+        app.multiselect[0].set_value(['__none__', 'bright'])
+        click(app, 'Save & next →')
+        self.assertTrue(app.error)
+        app.multiselect[0].set_value(['__none__'])
+        click(app, 'Save & next →')
+        row = ml.read_rows(app.session_state['manifest'])[0]
+        self.assertEqual(row['traits_reviewed'], '1')
+        self.assertTrue(all(row[tag] == '0' for tag in ml.TAGS))
 
     def test_unreadable_audio_can_be_skipped(self):
         (self.library / 'a.wav').write_bytes(b'bad audio')
@@ -146,6 +176,7 @@ class LabelUiTests(unittest.TestCase):
         self.assertEqual(app.text_input(key='folder').value, str(self.library))
         click(app, 'Import / resume folder')
         for _ in range(2):
+            next(s for s in app.selectbox if s.label == 'Instrument').select('kick')
             click(app, 'Save & next →')
         self.assertTrue(any('Library complete' in message.value for message in app.success))
         self.assertEqual(app.session_state['session_saved'], 2)

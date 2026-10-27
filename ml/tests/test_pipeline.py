@@ -1,5 +1,6 @@
 """Synthetic fixtures verify the pipeline; they do not measure real-world tagging accuracy."""
 import json
+import csv
 from pathlib import Path
 import sys
 import tempfile
@@ -117,6 +118,62 @@ class PipelineTests(unittest.TestCase):
         Path(rows[1]['path']).write_bytes(Path(rows[0]['path']).read_bytes())
         ml.write_rows(manifest, rows)
         with self.assertRaisesRegex(ValueError, 'Duplicate'):
+            ml.train(manifest, self.root / 'model', self.root / 'report')
+
+    def test_combined_instrument_and_timbre_training(self):
+        rows = self.fixture_rows()
+        for row in rows:
+            row['instrument'] = 'snare' if row['bright'] == '1' else 'kick'
+        manifest = self.root / 'labels.csv'
+        ml.write_rows(manifest, rows)
+        model, report = self.root / 'model.joblib', self.root / 'report.json'
+        result = ml.train(manifest, model, report, ['bright'])
+        self.assertEqual(result['instrument']['status'], 'trained')
+        self.assertEqual(result['instrument']['classes'], ['kick', 'snare'])
+        self.assertIn('bright', result['metrics'])
+        self.assertIn('macro avg', result['instrument']['test']['metrics'])
+        unseen = self.audio('unseen/example.wav', seed=9000, bright=True)
+        output = self.root / 'prediction.json'
+        ml.predict(model, unseen.parent, output)
+        prediction = json.loads(output.read_text())[0]
+        self.assertIn(prediction['instrument'], ['kick', 'snare'])
+        self.assertEqual(set(prediction['instrument_scores']), {'kick', 'snare'})
+        self.assertIn('bright', prediction['scores'])
+        # Instrument-only labels must not become negative timbre examples.
+        for row in rows:
+            row['traits_reviewed'] = '0'
+            row.update({tag: '' for tag in ml.TAGS})
+        ml.write_rows(manifest, rows)
+        result = ml.train(manifest, model, report)
+        self.assertEqual(result['instrument']['status'], 'trained')
+        self.assertEqual(result['metrics'], {})
+        self.assertEqual(set(result['skipped_traits']), set(ml.TAGS))
+
+    def test_legacy_manifest_migrates_without_losing_traits(self):
+        rows = self.fixture_rows()[:2]
+        manifest = self.root / 'legacy.csv'
+        with manifest.open('w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=ml.LEGACY_FIELDS)
+            writer.writeheader()
+            writer.writerows(rows)
+        migrated = ml.read_rows(manifest)
+        self.assertEqual(migrated[0]['instrument'], '')
+        self.assertEqual(migrated[0]['traits_reviewed'], '1')
+        from label_session import save_labels
+        save_labels(manifest, migrated[0]['path'], migrated[0]['pack'], None, instrument='kick')
+        updated = ml.read_rows(manifest)
+        self.assertEqual(updated[0]['instrument'], 'kick')
+        for tag in ml.TAGS:
+            self.assertEqual(updated[0][tag], rows[0][tag])
+            self.assertEqual(updated[1][tag], rows[1][tag])
+
+    def test_instrument_class_missing_from_held_out_pack_blocks_training(self):
+        rows = self.fixture_rows()
+        for index, row in enumerate(rows):
+            row['instrument'] = 'snare' if index == 0 else 'kick'
+        manifest = self.root / 'labels.csv'
+        ml.write_rows(manifest, rows)
+        with self.assertRaisesRegex(ValueError, 'Instrument classes missing'):
             ml.train(manifest, self.root / 'model', self.root / 'report')
 
 

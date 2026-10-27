@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 import streamlit as st
 import soundfile as sf
-from sorter_ml import TAGS, read_rows
+from sorter_ml import INSTRUMENTS, TAGS, read_rows
 from label_session import choose_folder, data_directory, import_folder, save_labels
 
 st.set_page_config(page_title='Sorter · Sound lab', page_icon='🎧', layout='centered')
@@ -20,6 +20,7 @@ state.setdefault('session_saved', 0)
 state.setdefault('skipped', [])
 state.setdefault('current_path', '')
 state.setdefault('previous_tags', None)
+state.setdefault('previous_instrument', None)
 
 with st.expander('📂 Choose or resume a library', expanded=not bool(state.manifest)):
     st.caption('Choose a folder on the computer running this app. Import references the files; it never moves or copies audio.')
@@ -41,6 +42,7 @@ with st.expander('📂 Choose or resume a library', expanded=not bool(state.mani
             state.skipped = []
             state.session_saved = 0
             state.previous_tags = None
+            state.previous_instrument = None
             state.pop('review_sample', None)
             st.success(f'{added} new samples imported. Existing labels preserved.')
         except (OSError, ValueError) as ex:
@@ -62,6 +64,7 @@ with st.expander('📂 Choose or resume a library', expanded=not bool(state.mani
             state.skipped = []
             state.session_saved = 0
             state.previous_tags = None
+            state.previous_instrument = None
     st.caption(f'Labels are saved automatically here: {storage}')
 
 if not state.manifest:
@@ -76,7 +79,7 @@ except (OSError, ValueError) as ex:
 if not rows:
     st.info('No supported audio found. Choose another folder or add audio and import again.')
     st.stop()
-reviewed = sum(r['reviewed'] == '1' for r in rows)
+reviewed = sum(r['reviewed'] == '1' and r['instrument'] in INSTRUMENTS for r in rows)
 goal = 20
 col1, col2, col3 = st.columns(3)
 col1.metric('Labeled', f'{reviewed} / {len(rows)}')
@@ -85,7 +88,7 @@ col3.metric('Round goal', f'{min(state.session_saved, goal)} / {goal}')
 st.progress(reviewed / len(rows), text=f'{reviewed / len(rows):.0%} of this library reviewed')
 if state.session_saved >= goal:
     st.success('🏅 Round goal reached! Take a break or keep listening. Careful labels matter more than speed.')
-st.caption('Save writes your labels immediately. Skips stay unlabeled and never count toward your goal.')
+st.caption('Instrument first, timbre optional. Progress counts instrument labels; older trait-only samples need an instrument pass. Skips do not count.')
 
 with st.expander('Trait guide & previous labels'):
     st.markdown('''**Soft**: gentle, rounded onset. **Punchy**: strong, distinct attack.
@@ -101,7 +104,7 @@ Traits overlap. Keep playback volume consistent: soft does not simply mean quiet
     if st.button('Review this sample', key='review'):
         state.current_path = previous
 
-pending = [r for r in rows if r['reviewed'] != '1' and r['path'] not in state.skipped]
+pending = [r for r in rows if (r['reviewed'] != '1' or r['instrument'] not in INSTRUMENTS) and r['path'] not in state.skipped]
 row = next((r for r in rows if r['path'] == state.current_path), None)
 if row is None:
     row = pending[0] if pending else None
@@ -119,7 +122,7 @@ state.current_path = row['path']
 # Per-file keys prevent previous selections carrying into a new sound.
 identity = row['path']
 st.subheader(Path(identity).name)
-st.caption(f'Pack: {row["pack"]} · {"Previously labeled" if row["reviewed"] == "1" else "Not labeled yet"}')
+st.caption(f'Pack: {row["pack"]} · Instrument: {INSTRUMENTS.get(row["instrument"], "Not labeled yet")}')
 readable = False
 try:
     with sf.SoundFile(identity) as audio:
@@ -133,20 +136,33 @@ except (OSError, RuntimeError, ValueError) as ex:
     st.error(f'Cannot play this sample: {ex}. Skip it to continue; no label will be saved.')
 
 if readable:
-    if st.button('Use previous tags', key='use_previous', disabled=state.previous_tags is None,
-                 help='Reuse tags from the last sample you saved in this session. You can edit them before saving.'):
-        state[f'tags-{identity}'] = list(state.previous_tags)
-    if state.previous_tags is not None:
-        st.caption('Previous tags: ' + (', '.join(state.previous_tags) or 'None selected'))
+    if st.button('Use previous tags', key='use_previous', disabled=state.previous_instrument is None,
+                 help='Reuse the instrument and optional timbre tags from your last saved sample; edit before saving.'):
+        state[f'instrument-{identity}'] = state.previous_instrument
+        state[f'tags-{identity}'] = (list(state.previous_tags) or ['__none__']) if state.previous_tags is not None else []
+    if state.previous_instrument is not None:
+        st.caption('Previous: ' + INSTRUMENTS[state.previous_instrument] +
+                   (' · ' + (', '.join(state.previous_tags) or 'No timbre traits') if state.previous_tags is not None else ' · Instrument only'))
     with st.form(f'label-{identity}'):
+        instrument = st.selectbox('Instrument', ['', *INSTRUMENTS],
+                                  index=list(['', *INSTRUMENTS]).index(row['instrument']) if row['instrument'] in INSTRUMENTS else 0,
+                                  format_func=lambda value: INSTRUMENTS.get(value, 'Choose an instrument…'), key=f'instrument-{identity}')
+        st.caption('Use Kick for an 808 kick and Bass for a sustained bass note. Use Mixed for layered instruments; skip unidentified sounds instead of guessing.')
+        selected = st.multiselect('Timbre', ['__none__', *TAGS],
+                                  default=([t for t in TAGS if row[t] == '1'] or ['__none__']) if row['traits_reviewed'] == '1' else [],
+                                  format_func=lambda value: 'None of these traits' if value == '__none__' else value.title(),
+                                  key=f'tags-{identity}')
+        st.caption('Choose multiple timbre traits if needed. Leave empty to label only the instrument, or choose None of these traits for explicit negatives. Existing traits are preserved when left empty.')
         pack = st.text_input('Original sample pack', value=row['pack'], key=f'pack-{identity}')
-        selected = st.multiselect('What does it sound like?', TAGS, default=[t for t in TAGS if row[t] == '1'], key=f'tags-{identity}')
-        st.caption('Choose every trait you hear. Unselected traits become explicit negatives when saved.')
         submitted = st.form_submit_button('Save & next →', type='primary')
         if submitted:
             try:
-                newly_reviewed = save_labels(manifest, identity, pack, selected)
-                state.previous_tags = list(selected)
+                if '__none__' in selected and len(selected) > 1:
+                    raise ValueError('Choose timbre traits OR None of these traits, not both.')
+                traits = [tag for tag in selected if tag != '__none__'] if selected else None
+                newly_reviewed = save_labels(manifest, identity, pack, traits, instrument=instrument)
+                state.previous_instrument = instrument
+                state.previous_tags = traits
                 state.session_saved += int(newly_reviewed)
                 state.current_path = ''
                 st.rerun()

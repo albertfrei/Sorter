@@ -2,7 +2,7 @@
 import hashlib
 import os
 from pathlib import Path
-from sorter_ml import EXTENSIONS, TAGS, read_rows, write_rows
+from sorter_ml import EXTENSIONS, INSTRUMENTS, TAGS, read_rows, write_rows
 
 
 def data_directory():
@@ -36,17 +36,23 @@ def import_folder(folder, storage=None, pack_name='', manifest=None):
     return manifest, added
 
 
-def save_labels(manifest, path, pack, tags):
+def save_labels(manifest, path, pack, tags, instrument=None):
     if not pack.strip():
         raise ValueError('Enter the original sample pack name.')
-    if not set(tags).issubset(TAGS):
+    if tags is not None and not set(tags).issubset(TAGS):
         raise ValueError('Unknown trait.')
+    if instrument is not None and instrument not in INSTRUMENTS:
+        raise ValueError('Choose an instrument, or skip if you are unsure.')
     rows = read_rows(manifest)
     row = next((r for r in rows if r['path'] == path), None)
     if row is None:
         raise ValueError('Sample is no longer in this dataset. Reopen it before saving.')
-    was_reviewed = row['reviewed'] == '1'
-    row.update(pack=pack.strip(), reviewed='1', **{tag: str(int(tag in tags)) for tag in TAGS})
+    was_reviewed = row['reviewed'] == '1' and row['instrument'] in INSTRUMENTS
+    row.update(pack=pack.strip(), reviewed='1')
+    if instrument is not None:
+        row['instrument'] = instrument
+    if tags is not None:
+        row.update(traits_reviewed='1', **{tag: str(int(tag in tags)) for tag in TAGS})
     write_rows(manifest, rows)
     return not was_reviewed
 
