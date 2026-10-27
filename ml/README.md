@@ -6,20 +6,29 @@ The WPF Scan button still uses metadata/name rules. This tooling does not yet at
 
 ## Windows quick start
 
-Install Python 3.12 (64-bit). In PowerShell at the repository root:
+Install Python 3.12 (64-bit) with the Python launcher, then double-click **`ml/Start Labeling.cmd`**. The launcher sets up/refreshes the Python environment and opens the local labeling page. Internet is needed for dependency installation; audio is never uploaded. Keep the terminal window open while labeling. Windows launcher and native folder browsing require validation on Windows; the UI flows are tested on Linux.
+
+In the page:
+
+1. Click **Browse folders…** (or paste the folder path).
+2. Optionally enter an original pack name, then click **Import / resume folder**. Audio stays in place; import adds references to the dataset.
+3. Play a sound, choose all audible traits, confirm you listened, and click **Save & next**. Labels are written immediately and the next sound appears automatically.
+4. Use **Skip for now** when uncertain. Skips remain unlabeled, earn no progress, and can be revisited at the end of the round.
+5. Work toward the 20-sample session goal. You can stop anytime and **Resume saved dataset** later; unfinished sounds appear first. **Trait guide & previous labels** lets you review earlier answers.
+
+Re-importing the same folder discovers new files while preserving labels. To combine separate packs, import the first, then check **Add this folder to the current dataset** for subsequent imports. Correct original pack names before saving: categories such as `Snares` are not pack identities. Use at least five original packs for training. There is no speed score or model-suggested answer; careful, independent labels matter more than completing a round.
+
+Labels are stored in `%LOCALAPPDATA%\Sorter\Training` on Windows. The page displays the CSV path in **Dataset details**, and at round completion, for training and backup. Set `SORTER_DATA_DIR` before launching to choose another location. On Linux the default is `ml/data/`. Session counters and skipped queues reset when the browser session ends; reviewed labels persist. Missing or moved sample paths remain in the manifest and can be skipped; do not move samples during labeling. Use one labeler per dataset.
+
+For manual startup after creating the virtual environment:
 
 ```powershell
-py -3.12 -m venv ml/.venv
-.\ml\.venv\Scripts\python.exe -m pip install -r ml/requirements.lock
-.\ml\.venv\Scripts\python.exe ml/sorter_ml.py init "D:\Samples" "ml/data/labels.csv"
-.\ml\.venv\Scripts\python.exe -m streamlit run ml/label.py --server.address 127.0.0.1 --browser.gatherUsageStats false -- ml/data/labels.csv
+.\ml\.venv\Scripts\python.exe -m streamlit run ml/label.py --server.address 127.0.0.1 --browser.gatherUsageStats false
 ```
 
-Streamlit opens a local listening and labeling page. Choose a sample number, listen, select **all** audible traits, check the pack name, and save. The page is for one labeler at a time. Stop it with Ctrl+C. Keep the default local-only binding. Nothing is copied or moved. Use WAV or FLAC initially for reliable browser playback; other formats depend on local decoder/browser support.
+Existing manifests still work with `-- path/to/labels.csv` after the command above. The CLI `init` command remains available for batch workflows. The folder picker browses the computer running Python, so run locally on Windows to choose your desktop files. Keep the local-only binding. WAV and FLAC are recommended initially; codec support for other formats varies. Playback and training use the first 12 seconds.
 
-The manifest contains absolute file paths; keep the samples in place while labeling and training. Top-level folders initially supply pack names. **Correct these to original sample pack identities**: category folders such as `Snares` are not packs. Use the original unsorted library when possible. Renamed or copied versions of the same pack must have the same pack identity.
-
-Unreviewed rows have blank tags and are excluded from training. Saving a row marks selected tags `1` and all other tags `0`: these are explicit negative labels. If unsure about the traits, leave the row unreviewed instead of guessing. Back up the CSV; re-running `init` refuses to replace an existing manifest.
+Unreviewed rows have blank tags and are excluded from training. Saving a row marks selected tags `1` and all other tags `0`: these are explicit negative labels. If unsure about the traits, skip instead of guessing. Back up the CSV. The displayed manifest path replaces `ml/data/labels.csv` in the training command below.
 
 ## Labeling guide
 
