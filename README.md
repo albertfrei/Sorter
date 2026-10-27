@@ -22,6 +22,8 @@ The WPF app does not yet include playback, manual category correction or machine
 
 The [local ML toolkit](ml/README.md) lets you listen to drum one-shots, label an **instrument** (such as kick, snare or piano) and overlapping **timbre** traits (soft, acoustic, bright), train a combined audio-based model, and export suggested tags. It includes a local labeling page, pack-separated evaluation and per-trait metrics. Start there with your own samples; no trained model or real-library accuracy claim is included. Predictions are not yet connected to the WPF table or folder exports.
 
+Training optionally supports local CLAP audio embeddings via `--features clap --clap-model PATH`. The labeling workflow and baseline default stay the same; see the toolkit guide for optional dependencies and checkpoint setup.
+
 With Python 3.12 installed, double-click **`ml/Start Labeling.cmd`** to open Sound lab. Browse to a folder, import it, then listen and **Save & next** through a labeling round. Progress and skipped samples are visible, and labels persist so you can resume later. No manual CSV initialization is needed.
 
 ## Copy access errors

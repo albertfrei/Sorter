@@ -1,0 +1,4 @@
+# Optional embedding backend; the labeling launcher continues to use requirements.lock.
+-r requirements.txt
+torch==2.6.0
+transformers==4.51.3

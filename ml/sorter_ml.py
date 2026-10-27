@@ -120,7 +120,25 @@ def fingerprint(path):
     return digest.hexdigest()
 
 
-def train(manifest, model_path, report_path, tags=None):
+def feature_extractor(backend='baseline', clap_model=None, saved=None):
+    config = saved if saved is not None else dict(backend=backend, version=1)
+    if config.get('version') != 1:
+        raise ValueError('Feature backend version mismatch; retrain the model')
+    if config['backend'] == 'baseline':
+        if clap_model is not None:
+            raise ValueError('--clap-model requires the clap feature backend')
+        return features, config
+    if config['backend'] != 'clap':
+        raise ValueError('Unknown feature backend')
+    directory = clap_model or config.get('model_path')
+    if not directory:
+        raise ValueError('CLAP requires --clap-model pointing to a local unfused CLAP model directory')
+    from clap_features import ClapFeatures
+    extractor = ClapFeatures(directory, expected_fingerprint=config.get('checkpoint_sha256'))
+    return extractor, extractor.config
+
+
+def train(manifest, model_path, report_path, tags=None, feature_backend='baseline', clap_model=None):
     tags = TAGS if tags is None else list(dict.fromkeys(tags))
     if not tags or not set(tags).issubset(TAGS):
         raise ValueError('Choose at least one supported trait')
@@ -135,7 +153,8 @@ def train(manifest, model_path, report_path, tags=None):
     hashes = [fingerprint(r['path']) for r in rows]
     if len(set(hashes)) != len(hashes):
         raise ValueError('Duplicate audio files detected. Remove duplicate manifest rows before training')
-    X = np.array([features(r['path']) for r in rows])
+    extract, feature_config = feature_extractor(feature_backend, clap_model)
+    X = np.array([extract(r['path']) for r in rows])
     groups = np.array([r['pack'] for r in rows])
     trainval, test = next(GroupShuffleSplit(n_splits=1, test_size=.2, random_state=42).split(X, groups=groups))
     train_local, val_local = next(GroupShuffleSplit(n_splits=1, test_size=.25, random_state=43).split(X[trainval], groups=groups[trainval]))
@@ -186,30 +205,31 @@ def train(manifest, model_path, report_path, tags=None):
         precision, recall, f1, _ = precision_recall_fscore_support(labels[test_indices], scores >= threshold, average='binary', zero_division=0)
         metrics[tag] = dict(precision=float(precision), recall=float(recall), f1=float(f1), average_precision=float(average_precision_score(labels[test_indices], scores)), threshold=threshold, test_positives=int(labels[test_indices].sum()), test_samples=len(test_indices))
         models[tag], thresholds[tag] = model, threshold
-    report = dict(feature_version=VERSION, tags=list(models), samples=len(rows),
+    report = dict(feature_version=VERSION, feature_config=feature_config, tags=list(models), samples=len(rows),
                   splits={name: dict(samples=len(indices), packs=sorted(set(groups[indices]))) for name, indices in splits},
                   instrument=instrument_report, metrics=metrics, skipped_traits=skipped_traits,
-                  warning='Baseline scores are not calibrated confidence. Near duplicates and pack similarity can still inflate evaluation. Validate on your own unseen libraries.')
+                  warning='Scores are not calibrated confidence. Near duplicates and pack similarity can still inflate evaluation. Validate on your own unseen libraries.')
     Path(model_path).parent.mkdir(parents=True, exist_ok=True)
     Path(report_path).parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(dict(feature_version=VERSION, models=models, thresholds=thresholds, instrument_model=instrument_model), model_path)
+    joblib.dump(dict(feature_version=VERSION, feature_config=feature_config, models=models, thresholds=thresholds, instrument_model=instrument_model), model_path)
     Path(report_path).write_text(json.dumps(report, indent=2), encoding='utf-8')
     return report
 
 
-def predict(model_path, library, output):
+def predict(model_path, library, output, clap_model=None):
     if not Path(library).is_dir():
         raise ValueError('Prediction library folder does not exist')
     # joblib uses pickle. Only load model files you trained or explicitly trust.
     model = joblib.load(model_path)
     if model['feature_version'] != VERSION:
         raise ValueError('Feature version mismatch; retrain the model')
+    extract, _ = feature_extractor(clap_model=clap_model, saved=model.get('feature_config'))
     results = []
     for path in sorted(Path(library).resolve().rglob('*')):
         if not path.is_file() or path.is_symlink() or path.suffix.lower() not in EXTENSIONS:
             continue
         try:
-            x = features(path).reshape(1, -1)
+            x = extract(path).reshape(1, -1)
             scores = {tag: float(est.predict_proba(x)[0, 1]) for tag, est in model['models'].items()}
             tags = [tag for tag, score in scores.items() if score >= model['thresholds'][tag]]
             result = dict(path=str(path), tags=tags, scores=scores, needs_review=True)
@@ -231,11 +251,14 @@ def main():
     init = commands.add_parser('init'); init.add_argument('library'); init.add_argument('manifest')
     fit = commands.add_parser('train'); fit.add_argument('manifest'); fit.add_argument('--model', default='artifacts/sorter.joblib'); fit.add_argument('--report', default='artifacts/report.json')
     fit.add_argument('--tags', nargs='+', choices=TAGS, default=TAGS, help='Additional timbre traits to consider alongside instrument training; default: all')
+    fit.add_argument('--features', choices=['baseline', 'clap'], default='baseline', help='Audio feature backend; labeling and training tasks stay the same')
+    fit.add_argument('--clap-model', help='Local Hugging Face unfused CLAP model directory; no automatic downloads')
     infer = commands.add_parser('predict'); infer.add_argument('model'); infer.add_argument('library'); infer.add_argument('--output', default='predictions.json')
+    infer.add_argument('--clap-model', help='Relocated CLAP directory with identical checkpoint files; backend comes from artifact')
     args = parser.parse_args()
     if args.command == 'init': print(f'Created {init_manifest(args.library, args.manifest)} unlabeled rows')
-    elif args.command == 'train': print(json.dumps(train(args.manifest, args.model, args.report, args.tags), indent=2))
-    else: print(f'Analyzed {predict(args.model, args.library, args.output)} files')
+    elif args.command == 'train': print(json.dumps(train(args.manifest, args.model, args.report, args.tags, args.features, args.clap_model), indent=2))
+    else: print(f'Analyzed {predict(args.model, args.library, args.output, args.clap_model)} files')
 
 
 if __name__ == '__main__':

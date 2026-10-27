@@ -65,7 +65,28 @@ The trainer splits **whole packs** into training, validation and test sets using
 
 The report includes instrument precision/recall/F1 per class, macro averages and confusion matrices (row = true class, column = predicted class, ordered by `classes`), validation/test counts, trained and skipped timbre traits, and pack split membership. Review these before relying on predictions. Exact duplicate file contents are rejected to reduce leakage, but differently encoded/trimmed duplicates and related packs still need manual attention. Maintain a further untouched library for later real-world evaluation; repeatedly evaluating the same test set can bias decisions.
 
-The model uses 65 features describing spectral tone, cepstra, energy, crest factor and dynamics, with a balanced multiclass logistic regression for instruments and one balanced binary logistic regression per trainable timbre trait. It reads the first **12 seconds**, averages channels to mono, resamples to 22.05 kHz and does not peak-normalize. Long loops, stereo cancellation and subjective labels can limit accuracy. Acoustic/electronic distinctions may need a pretrained embedding model after we measure this baseline. Loudness/mastering differences can become misleading shortcuts. This is not a pretrained music-understanding model.
+By default the model uses 65 features describing spectral tone, cepstra, energy, crest factor and dynamics, with a balanced multiclass logistic regression for instruments and one balanced binary logistic regression per trainable timbre trait. It reads the first **12 seconds**, averages channels to mono, resamples to 22.05 kHz and does not peak-normalize. Long loops, stereo cancellation and subjective labels can limit accuracy. Loudness/mastering differences can become misleading shortcuts.
+
+## Optional CLAP audio embeddings
+
+CLAP (Contrastive Language-Audio Pretraining) can replace the handcrafted features with pretrained audio embeddings. The same reviewed CSV, instrument classifier, optional timbre classifiers, pack splits and validation-selected thresholds are used. This is supervised training on your labels, not zero-shot text tagging. The labeling page and Windows launcher require no CLAP installation and continue to work unchanged; no model suggestions are added to the labeling flow.
+
+Install the optional dependencies in the existing Python 3.12 environment:
+
+```powershell
+.\ml\.venv\Scripts\python.exe -m pip install -r ml/requirements-clap.txt
+```
+
+Download a Hugging Face **`laion/clap-htsat-unfused`** model snapshot to a local folder (for example `ml/artifacts/clap-htsat-unfused`). It must include `config.json`, `preprocessor_config.json` and the model weights (`model.safetensors` or `pytorch_model.bin`, including any shards/index). Downloading dependencies and pretrained weights requires internet and disk space; training/prediction only load local files and never upload audio or automatically fetch weights. Use trusted model files. CPU inference needs more memory and time than the baseline; no GPU is required.
+
+```powershell
+.\ml\.venv\Scripts\python.exe ml/sorter_ml.py train ml/data/labels.csv --features clap --clap-model ml/artifacts/clap-htsat-unfused --model ml/artifacts/sorter-clap.joblib --report ml/artifacts/report-clap.json
+.\ml\.venv\Scripts\python.exe ml/sorter_ml.py predict ml/artifacts/sorter-clap.joblib "D:\New Samples" --output ml/artifacts/predictions-clap.json
+```
+
+CLAP reads the first **10 seconds**, mixes channels to mono, resamples to 48 kHz and uses the checkpoint's padding/preprocessing, with no peak normalization. The frozen CPU model runs in evaluation mode; normalized audio embeddings feed the existing classifiers. Fused CLAP checkpoints are not supported. Keep a separate baseline artifact to compare held-out results on the same labels and packs; pretrained embeddings do not guarantee better accuracy.
+
+Artifacts and reports record the feature backend, its version, local model path and SHA-256 fingerprint of the checkpoint files. Prediction automatically selects the saved backend. If you move the checkpoint, pass `predict ... --clap-model NEW_DIRECTORY` with the same files. A changed checkpoint is rejected before processing audio; retrain to change weights. Old baseline artifacts without backend metadata remain usable. Keep the checkpoint directory contents stable after training.
 
 ## Suggest tags without changing files
 
